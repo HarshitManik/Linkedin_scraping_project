@@ -54,7 +54,7 @@ Copy code
 
 ### 1. Clone the Repository
 
-```bash
+bash
 git clone https://github.com/HarshitManik/Linkedin_scraping_project.git
 cd Linkedin_scraping_project
 2. Setup a Virtual Environment (Recommended)
