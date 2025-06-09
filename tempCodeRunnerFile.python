@@ -1,0 +1,232 @@
+# %%
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
+from webdriver_manager.chrome import ChromeDriverManager
+
+options = Options()
+options.add_experimental_option("detach", True)
+
+# This auto-downloads the right ChromeDriver and uses it
+driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+
+
+
+
+import os
+import time
+from dotenv import load_dotenv
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from webdriver_manager.chrome import ChromeDriverManager
+
+# Load credentials from .env file
+load_dotenv()
+username = os.getenv("PORTAL_USERNAME")
+password = os.getenv("PORTAL_PASSWORD")
+
+# Chrome setup
+options = Options()
+options.add_experimental_option("detach", True)  # Keeps browser open
+
+driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+wait = WebDriverWait(driver, 15)
+
+driver.get("https://webkiosk.thapar.edu")
+driver.maximize_window()
+
+# Login
+wait.until(EC.presence_of_element_located((By.NAME, "MemberCode"))).send_keys(username)
+driver.find_element(By.NAME, "Password").send_keys(password)
+driver.find_element(By.NAME, "BTNSubmit").click()
+
+# Wait for landing page
+time.sleep(2)
+if "StudentPage.jsp" not in driver.current_url:
+    print("❌ Login failed.")
+    driver.quit()
+    exit()
+print("✅ Logged in successfully!")
+
+# Switch to left frame dynamically
+# Dynamically find the correct frame containing 'Exam. Info.'
+driver.switch_to.default_content()
+frames = driver.find_elements(By.TAG_NAME, "frame")
+print(f"🧩 Total frames found: {len(frames)}")
+
+target_frame_index = -1
+for i, frame in enumerate(frames):
+    try:
+        driver.switch_to.default_content()
+        driver.switch_to.frame(frames[i])
+        print(f"\n🔍 Inspecting Frame {i}...")
+
+        html = driver.page_source
+        if "Exam. Info." in html:
+            print(f"✅ 'Exam. Info.' FOUND in Frame {i}")
+            target_frame_index = i
+            break
+        else:
+            print(f"❌ 'Exam. Info.' NOT found in Frame {i}")
+    except Exception as e:
+        print(f"⚠️ Error inspecting frame {i}:", e)
+
+if target_frame_index == -1:
+    print("❌ Could not find frame containing 'Exam. Info.' Exiting.")
+    driver.quit()
+    exit()
+
+
+# Wait for menu to load
+time.sleep(2)
+
+# Attempt to click "Exam. Info."
+try:
+    exam_info = wait.until(
+        EC.presence_of_element_located(
+            (By.XPATH, "//div[@class='menutitle' and contains(., 'Exam. Info.')]")
+        )
+    )
+    driver.execute_script("arguments[0].scrollIntoView(true);", exam_info)
+    time.sleep(0.5)
+    exam_info.click()
+    print("✅ Clicked 'Exam. Info.'")
+except Exception as e:
+    print("⚠️ Failed to click 'Exam. Info.':", e)
+    print("🛠️ DEBUGGING FRAME CONTENT:")
+    print(driver.page_source[:2000])  # Print part of the frame's HTML
+    print("🧪 Attempting to click all .menutitle elements...")
+    try:
+        all_menu_items = driver.find_elements(By.CLASS_NAME, "menutitle")
+        for i, item in enumerate(all_menu_items):
+            try:
+                print(f"  🔘 Trying menu item {i}: {item.text.strip()}")
+                driver.execute_script("arguments[0].scrollIntoView(true);", item)
+                item.click()
+                print(f"    ✅ Click worked for: {item.text.strip()}")
+                time.sleep(0.5)
+            except Exception as sub_e:
+                print(f"    ❌ Click failed for menu {i}: {sub_e}")
+    except Exception as e:
+        print("❌ Failed to iterate over menu items:", e)
+    driver.quit()
+    exit()
+
+# Try clicking Exam Marks
+try:
+    exam_marks = wait.until(
+        EC.element_to_be_clickable((By.XPATH, "//font[contains(text(),'Exam Marks')]"))
+    )
+    exam_marks.click()
+    print("✅ Clicked 'Exam Marks'")
+    
+except Exception as e:
+    print("❌ Could not click 'Exam Marks':", e)
+    print("🛠️ Submenu HTML Snapshot:")
+    print(driver.page_source[:2000])
+    driver.quit()
+
+# ✅ INSERTING dropdown search logic here
+from selenium.webdriver.support.ui import Select
+
+# Wait briefly in case content loads dynamically
+time.sleep(2)
+
+# Re-check frame structure after clicking "Exam Marks"
+driver.switch_to.default_content()
+frames = driver.find_elements(By.TAG_NAME, "frame")
+print(f"🔁 Re-checking frames after 'Exam Marks' click: Found {len(frames)} frames")
+
+dropdown_found = False
+
+# Loop through all frames
+for idx, frame in enumerate(frames):
+    try:
+        driver.switch_to.default_content()
+        driver.switch_to.frame(frame)
+        print(f"➡️ Switched to Frame {idx}")
+
+        # Save HTML snapshot for debug
+        frame_html = driver.page_source
+        with open(f"frame{idx}_source.html", "w", encoding="utf-8") as f:
+            f.write(frame_html)
+        print(f"📝 Frame {idx} source saved to 'frame{idx}_source.html'")
+
+        selects = driver.find_elements(By.TAG_NAME, "select")
+        print(f"📊 Found {len(selects)} <select> elements:")
+
+        for s in selects:
+            id_attr = s.get_attribute("id")
+            name_attr = s.get_attribute("name")
+            print(f"   🔎 ID: {id_attr}, Name: {name_attr}")
+            if id_attr == "exam":
+                select = Select(s)
+                select.select_by_value("2425EVESEM")
+                print(f"✅ Selected '24-25 EVEN SEM' from dropdown in Frame {idx}")
+                dropdown_found = True
+                break
+
+        if dropdown_found:
+            break
+
+    except Exception as e:
+        print(f"⚠️ Error processing Frame {idx}: {e}")
+
+if not dropdown_found:
+    print("❌ Dropdown not found in any frame.")
+    driver.quit()
+import os
+
+# Try to click the "Show" button and take a screenshot
+try:
+    show_button = wait.until(
+        EC.element_to_be_clickable((By.XPATH, "//input[@type='submit' and @value='Show']"))
+    )
+    show_button.click()
+    print("✅ Clicked the 'Show' button")
+
+    # Wait for table or some result element to load (optional, increase delay if needed)
+    time.sleep(2)
+
+    # Screenshot directory (make sure it exists)
+    screenshot_dir = "screenshots"
+    os.makedirs(screenshot_dir, exist_ok=True)
+    screenshot_path = os.path.join(screenshot_dir, "exam_marks.png")
+
+    # Take screenshot of the current view
+    driver.save_screenshot(screenshot_path)
+    print(f"📸 Screenshot saved as '{screenshot_path}'")
+
+except Exception as e:
+    print("❌ Failed to click 'Show' button or take screenshot:", e)
+    driver.quit()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# %%
